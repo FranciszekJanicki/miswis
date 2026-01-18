@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import dash
 from dash import dcc, html, Input, Output, State
+from enum import Enum
 
 
 class PID:
@@ -158,6 +159,26 @@ def equations(state, t, params, pid_controller):
 
     return [dtheta, ddtheta, dphi, ddphi, dx, ddx, dpx, dpy]
 
+class RobotType(Enum):
+    SMALL = 1
+    MEDIUM = 2
+    HUGE = 3
+
+class RobotParams:
+    def __init__(self, mB, mW, LT, R, IB, IW, IV, b):
+        self.mB = mB
+        self.mW = mW
+        self.LT = LT
+        self.R = R
+        self.IB = IB 
+        self.IW = IW
+        self.IV = IV 
+        self.b = b
+
+smallParams = RobotParams(mB=0.5, mW=0.25, LT=0.15, R=0.03, IB=0.05, IW=0.01, IV=0.02, b=0.2)
+mediumParams = RobotParams(mB=1, mW=0.5, LT=0.2, R=0.05, IB=0.1, IW=0.02, IV=0.05, b=0.3)
+hugeParams = RobotParams(mB=2, mW=1, LT=0.3, R=0.08, IB=0.2, IW=0.05, IV=0.1, b=0.4)
+robotTypeToParams = {RobotType.SMALL: smallParams, RobotType.MEDIUM: mediumParams, RobotType.HUGE: hugeParams}
 
 def create_input(label, id_name, val):
     return html.Div([
@@ -216,8 +237,8 @@ app.layout = html.Div([
     Output("sim-graph", "figure"),
     Input("btn-run", "n_clicks"),
     State("input-kp", "value"),
-    State("input-ki", "value"),
-    State("input-kd", "value"),
+    State("input-ti", "value"),
+    State("input-td", "value"),
     State("input-IB", "value"),
     State("input-IW", "value"),
     State("input-IV", "value"),
@@ -228,11 +249,11 @@ app.layout = html.Div([
     State("input-mW", "value"),
     State("input-g", "value"),
 )
-def update_simulation(n_clicks, Kp, Ki, Kd, IB, IW, IV, R, b, LT, mB, mW, g):
+def update_simulation(n_clicks, Kp, Ti, Td, IB, IW, IV, R, b, LT, mB, mW, g):
     if n_clicks == 0:
         return go.Figure()
 
-    pid_sim = PID(Kp, Ki, Kd, 1000)
+    pid_sim = PID(Kp, Ti, Td, 1000)
 
     params = (IB, IV, R, b, LT, mB, mW, g, IW)
 
@@ -249,19 +270,18 @@ def update_simulation(n_clicks, Kp, Ki, Kd, IB, IW, IV, R, b, LT, mB, mW, g):
     py = solution[:, 7]
 
     fig = make_subplots(
-        rows=1, cols=4,
-        subplot_titles=["Trajektoria", "Theta (pochylenie)", "Phi", "Pozycja X"]
+        rows=2, cols=2,
+        subplot_titles=["Trajektoria (droga robota widziana od góry w 2D)", "Theta (odchylenie od pionu w osi kół, widziane od boku)", "Phi (rotacja w osi korpusu, widziane od góry)", "Pozycja X"]
     )
 
     fig.add_trace(go.Scatter(x=[], y=[], mode="lines", name="Trajectory"), row=1, col=1)
     fig.add_trace(go.Scatter(x=[], y=[], mode="lines", name="θ"), row=1, col=2)
-    fig.add_trace(go.Scatter(x=[], y=[], mode="lines", name="φ"), row=1, col=3)
-    fig.add_trace(go.Scatter(x=[], y=[], mode="lines", name="x"), row=1, col=4)
+    fig.add_trace(go.Scatter(x=[], y=[], mode="lines", name="φ"), row=2, col=1)
+    fig.add_trace(go.Scatter(x=[], y=[], mode="lines", name="x"), row=2, col=2)
 
     frames = []
 
-    step = 1
-    for k in range(1, len(t) + 1, step):
+    for k in range(1, len(t)):
         frames.append(
             go.Frame(
                 data=[
